@@ -1,0 +1,246 @@
+// Sistema de Gestão de Empréstimos
+// Schema Prisma - SQLite para desenvolvimento local
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+// PostgreSQL no Supabase
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================
+// AUTENTICAÇÃO (NextAuth.js)
+// ============================================
+
+model User {
+  id            String    @id @default(cuid())
+  name          String?
+  email         String    @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+
+  // Configurações padrão do usuário
+  defaultInterestRate Decimal @default(30.00)
+  defaultDailyPenalty Decimal @default(50.00)
+  defaultDueDays      Int     @default(30)
+
+  // Relações
+  accounts Account[]
+  sessions Session[]
+  clients  Client[]
+  loans    Loan[]
+  payments Payment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(cuid())
+  email     String
+  token     String   @unique
+  expires   DateTime
+  createdAt DateTime @default(now())
+
+  @@map("password_reset_tokens")
+}
+
+// ============================================
+// ENTIDADES DE NEGÓCIO
+// ============================================
+
+model Client {
+  id     String @id @default(cuid())
+  userId String
+
+  // Campos obrigatórios
+  name         String
+  cpf          String
+  phone        String
+  city         String
+  neighborhood String
+
+  // Campos opcionais
+  birthDate DateTime?
+  notes     String?
+
+  // Auditoria e timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String
+  updatedBy String?
+
+  // Relações
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loans       Loan[]
+  attachments ClientAttachment[]
+
+  // Multi-tenant: CPF único por usuário, não globalmente
+  @@unique([userId, cpf])
+  @@index([userId])
+  @@map("clients")
+}
+
+model ClientAttachment {
+  id       String  @id @default(cuid())
+  clientId String
+  fileName String
+  fileUrl  String
+  fileType String?
+  fileSize Int?
+
+  createdAt DateTime @default(now())
+  createdBy String
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([clientId])
+  @@map("client_attachments")
+}
+
+// Status: ACTIVE, OVERDUE, LATE, PAID
+model Loan {
+  id       String @id @default(cuid())
+  userId   String
+  clientId String
+
+  // Detalhes do empréstimo
+  principalAmount Decimal
+  loanDate        DateTime
+  dueDate         DateTime
+  interestRate    Decimal
+  dailyPenalty    Decimal
+  status          String   @default("ACTIVE")
+  notes           String?
+
+  // Campos calculados (cache para performance)
+  totalPaid          Decimal @default(0)
+  remainingPrincipal Decimal
+
+  // Auditoria e timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime?
+  createdBy String
+  updatedBy String?
+  paidAt    DateTime?
+
+  // Relações
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client   Client    @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  payments Payment[]
+
+  @@index([userId])
+  @@index([userId, status])
+  @@index([userId, dueDate])
+  @@index([userId, clientId])
+  @@map("loans")
+}
+
+// type: INTEREST_ONLY, FULL_SETTLEMENT
+// method: PIX, CASH, TRANSFER, OTHER
+model Payment {
+  id     String @id @default(cuid())
+  userId String
+  loanId String
+
+  // Detalhes do pagamento
+  amount      Decimal
+  paymentDate DateTime
+  type        String
+  method      String
+  notes       String?
+
+  // Anexo de comprovante (opcional)
+  receiptUrl      String?
+  receiptFileName String?
+
+  // Auditoria e timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  createdBy String
+
+  // Soft delete com justificativa (requisito de auditoria)
+  deletedAt    DateTime?
+  deletedBy    String?
+  deleteReason String?
+
+  // Relações
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loan Loan @relation(fields: [loanId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+  @@index([userId, loanId])
+  @@index([userId, paymentDate])
+  @@index([loanId])
+  @@map("payments")
+}
+
+// ============================================
+// LOG DE AUDITORIA
+// ============================================
+
+// action: CREATE, UPDATE, DELETE, RESTORE
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String
+  entityType String
+  entityId   String
+  action     String
+  oldData    String?
+  newData    String?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@map("audit_logs")
+}
