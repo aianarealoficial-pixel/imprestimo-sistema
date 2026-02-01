@@ -115,3 +115,22 @@ export async function deleteLoan(loanId: string): Promise<ActionResult> {
     return { success: false, error: error instanceof Error ? error.message : "Erro ao excluir empréstimo" };
   }
 }
+
+export async function updateLoanDueDate(loanId: string, dueDate: Date): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { success: false, error: "Não autorizado" };
+  }
+
+  try {
+    await LoanService.updateLoanDueDate(session.user.id, loanId, dueDate);
+
+    revalidatePath("/loans");
+    revalidatePath(`/loans/${loanId}`);
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao atualizar vencimento:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro ao atualizar vencimento" };
+  }
+}

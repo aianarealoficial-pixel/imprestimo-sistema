@@ -197,4 +197,29 @@ export const LoanService = {
 
         return true;
     },
+
+    async updateLoanDueDate(userId: string, loanId: string, newDueDate: Date) {
+        // Verificar se empréstimo existe e pertence ao usuário
+        const loan = await db.loan.findFirst({
+            where: { id: loanId, userId, deletedAt: null },
+        });
+
+        if (!loan) {
+            throw new Error("Empréstimo não encontrado");
+        }
+
+        if (loan.status === "PAID") {
+            throw new Error("Não é possível alterar vencimento de empréstimo quitado");
+        }
+
+        await db.loan.update({
+            where: { id: loanId },
+            data: {
+                dueDate: newDueDate,
+                updatedBy: userId,
+            },
+        });
+
+        return true;
+    },
 };

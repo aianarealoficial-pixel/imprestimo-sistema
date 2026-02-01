@@ -25,6 +25,7 @@ import {
 import { formatCurrency } from "@/lib/calculations";
 import { LoanStatus, PaymentType, PaymentMethod } from "@/lib/validators";
 import { DeleteLoanButton, DeletePaymentButton } from "@/components/loan/delete-buttons";
+import { EditDueDateButton } from "@/components/loan/edit-due-date";
 
 const statusConfig: Record<
   LoanStatus,
@@ -135,13 +136,18 @@ export default async function LoanPage({
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Vencimento:</span>
-              <span
-                className={
-                  settlement.daysOverdue > 0 ? "text-destructive font-medium" : ""
-                }
-              >
-                {format(loan.dueDate, "dd/MM/yyyy", { locale: ptBR })}
-              </span>
+              <div className="flex items-center">
+                <span
+                  className={
+                    settlement.daysOverdue > 0 ? "text-destructive font-medium" : ""
+                  }
+                >
+                  {format(loan.dueDate, "dd/MM/yyyy", { locale: ptBR })}
+                </span>
+                {loan.status !== "PAID" && (
+                  <EditDueDateButton loanId={loan.id} currentDueDate={loan.dueDate} />
+                )}
+              </div>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Taxa de juros:</span>
