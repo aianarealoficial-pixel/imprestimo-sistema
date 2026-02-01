@@ -24,6 +24,7 @@ import {
 } from "lucide-react";
 import { formatCurrency } from "@/lib/calculations";
 import { LoanStatus, PaymentType, PaymentMethod } from "@/lib/validators";
+import { DeleteLoanButton, DeletePaymentButton } from "@/components/loan/delete-buttons";
 
 const statusConfig: Record<
   LoanStatus,
@@ -74,14 +75,17 @@ export default async function LoanPage({
             Contrato de {loan.client.name}
           </p>
         </div>
-        {loan.status !== "PAID" && (
-          <Button asChild>
-            <Link href={`/payments/new?loanId=${loan.id}`}>
-              <Plus className="mr-2 h-4 w-4" />
-              Registrar Pagamento
-            </Link>
-          </Button>
-        )}
+        <div className="flex gap-2">
+          {loan.status !== "PAID" && (
+            <Button asChild>
+              <Link href={`/payments/new?loanId=${loan.id}`}>
+                <Plus className="mr-2 h-4 w-4" />
+                Registrar Pagamento
+              </Link>
+            </Button>
+          )}
+          <DeleteLoanButton loanId={loan.id} />
+        </div>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
@@ -236,6 +240,7 @@ export default async function LoanPage({
                   <TableHead>Tipo</TableHead>
                   <TableHead>Forma</TableHead>
                   <TableHead>Observação</TableHead>
+                  <TableHead className="w-[50px]"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -257,6 +262,9 @@ export default async function LoanPage({
                     <TableCell>{paymentMethodMap[payment.method as PaymentMethod]}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {payment.notes || "-"}
+                    </TableCell>
+                    <TableCell>
+                      <DeletePaymentButton paymentId={payment.id} />
                     </TableCell>
                   </TableRow>
                 ))}

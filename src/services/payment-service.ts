@@ -102,4 +102,70 @@ export const PaymentService = {
             },
         });
     },
+
+    async deletePayment(userId: string, paymentId: string, reason: string) {
+        // Buscar pagamento com dados do empréstimo
+        const payment = await db.payment.findFirst({
+            where: { id: paymentId, userId, deletedAt: null },
+            include: { loan: true },
+        });
+
+        if (!payment) {
+            throw new Error("Pagamento não encontrado");
+        }
+
+        // Buscar dias padrão do usuário
+        const user = await db.user.findUnique({
+            where: { id: userId },
+            select: { defaultDueDays: true },
+        });
+        const dueDays = user?.defaultDueDays ?? 30;
+
+        // Reverter totalPaid do empréstimo
+        const newTotalPaid = new Decimal(payment.loan.totalPaid).sub(payment.amount);
+
+        // Soft delete do pagamento
+        await db.payment.update({
+            where: { id: paymentId },
+            data: {
+                deletedAt: new Date(),
+                deletedBy: userId,
+                deleteReason: reason,
+            },
+        });
+
+        if (payment.type === "FULL_SETTLEMENT") {
+            // Reverter quitação: voltar status para ACTIVE
+            await db.loan.update({
+                where: { id: payment.loanId },
+                data: {
+                    totalPaid: newTotalPaid,
+                    remainingPrincipal: payment.loan.principalAmount,
+                    status: "ACTIVE",
+                    paidAt: null,
+                    updatedBy: userId,
+                },
+            });
+        } else {
+            // INTEREST_ONLY: reverter vencimento para antes do pagamento
+            // Calcula data anterior: loanDate atual - dueDays = loanDate anterior
+            const previousLoanDate = new Date(payment.loan.loanDate);
+            previousLoanDate.setDate(previousLoanDate.getDate() - dueDays);
+
+            const previousDueDate = new Date(payment.loan.dueDate);
+            previousDueDate.setDate(previousDueDate.getDate() - dueDays);
+
+            await db.loan.update({
+                where: { id: payment.loanId },
+                data: {
+                    totalPaid: newTotalPaid,
+                    loanDate: previousLoanDate,
+                    dueDate: previousDueDate,
+                    updatedBy: userId,
+                },
+            });
+        }
+
+        return true;
+    },
 };

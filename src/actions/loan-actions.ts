@@ -96,3 +96,22 @@ export async function getUserDefaults() {
     defaultDueDays: user.defaultDueDays
   };
 }
+
+export async function deleteLoan(loanId: string): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { success: false, error: "Não autorizado" };
+  }
+
+  try {
+    await LoanService.deleteLoan(session.user.id, loanId);
+
+    revalidatePath("/loans");
+    revalidatePath("/dashboard");
+    revalidatePath("/clients");
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao excluir empréstimo:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro ao excluir empréstimo" };
+  }
+}

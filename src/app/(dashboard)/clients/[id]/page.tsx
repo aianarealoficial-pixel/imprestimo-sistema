@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/table";
 import { Pencil, Plus, Phone, MapPin, Calendar, FileText } from "lucide-react";
 import { formatCurrency } from "@/lib/calculations";
+import { DeleteClientButton } from "@/components/client/delete-button";
 
 const statusMap = {
   ACTIVE: { label: "Ativo", variant: "default" as const },
@@ -56,6 +57,7 @@ export default async function ClientPage({
               Novo Empréstimo
             </Link>
           </Button>
+          <DeleteClientButton clientId={client.id} clientName={client.name} />
         </div>
       </div>
 

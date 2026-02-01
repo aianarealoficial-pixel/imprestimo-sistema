@@ -54,3 +54,26 @@ export async function getLoansForPayment() {
 
   return await LoanService.getLoansPendingPayment(session.user.id);
 }
+
+export async function deletePayment(paymentId: string, reason: string): Promise<ActionResult> {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return { success: false, error: "Não autorizado" };
+  }
+
+  if (!reason || reason.trim().length < 3) {
+    return { success: false, error: "Informe o motivo da exclusão (mínimo 3 caracteres)" };
+  }
+
+  try {
+    await PaymentService.deletePayment(session.user.id, paymentId, reason.trim());
+
+    revalidatePath("/payments");
+    revalidatePath("/loans");
+    revalidatePath("/dashboard");
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao excluir pagamento:", error);
+    return { success: false, error: error instanceof Error ? error.message : "Erro ao excluir pagamento" };
+  }
+}

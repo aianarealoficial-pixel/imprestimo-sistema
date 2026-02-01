@@ -165,4 +165,36 @@ export const LoanService = {
             orderBy: { name: "asc" },
         });
     },
+
+    async deleteLoan(userId: string, loanId: string) {
+        // Verificar se empréstimo existe e pertence ao usuário
+        const loan = await db.loan.findFirst({
+            where: { id: loanId, userId, deletedAt: null },
+        });
+
+        if (!loan) {
+            throw new Error("Empréstimo não encontrado");
+        }
+
+        // Soft delete de todos os pagamentos relacionados
+        await db.payment.updateMany({
+            where: { loanId, deletedAt: null },
+            data: {
+                deletedAt: new Date(),
+                deletedBy: userId,
+                deleteReason: "Empréstimo excluído",
+            },
+        });
+
+        // Soft delete do empréstimo
+        await db.loan.update({
+            where: { id: loanId },
+            data: {
+                deletedAt: new Date(),
+                updatedBy: userId,
+            },
+        });
+
+        return true;
+    },
 };
