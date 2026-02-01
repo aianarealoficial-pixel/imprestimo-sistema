@@ -53,7 +53,8 @@ export function calculateSettlement(
   payments: { totalPaid: Decimal | number; interestOnlyPaid: Decimal | number },
   loanDate: Date,
   dueDate: Date,
-  today: Date = new Date()
+  today: Date = new Date(),
+  lastInterestPaymentDate?: Date | null
 ): SettlementDetails {
   const principal = new Decimal(principalAmount);
   const rate = new Decimal(interestRate);
@@ -62,8 +63,9 @@ export function calculateSettlement(
   const totalPaid = new Decimal(payments.totalPaid);
   const interestOnlyPaid = new Decimal(payments.interestOnlyPaid);
 
-  // Dias desde o empréstimo
-  const daysElapsed = Math.max(0, differenceInDays(today, loanDate));
+  // Dias desde o último pagamento de juros (ou desde o empréstimo se nunca pagou)
+  const interestStartDate = lastInterestPaymentDate || loanDate;
+  const daysElapsed = Math.max(0, differenceInDays(today, interestStartDate));
 
   // Dias em atraso (após vencimento)
   const daysOverdue = Math.max(0, differenceInDays(today, dueDate));
@@ -72,44 +74,24 @@ export function calculateSettlement(
   const interest = calculateInterest(principal, rate, daysElapsed);
   const penaltyAmount = calculatePenalty(penalty, daysOverdue);
 
-  const totalAccruedInterestAndPenalty = interest.add(penaltyAmount);
-
-  // Lógica:
-  // Pagamentos "Somente Juros" abatem APENAS Juros e Multa.
-  // Se pagou mais juros do que devia, fica como crédito de juros (não abate principal na visão do agiota padrão)
-  // Mas para facilitar, vamos dizer que abate juros futuros, mas NUNCA principal.
-
-  // Pagamentos "Normais" (Quitação) abatem tudo.
-  // Como só temos 2 tipos, assumimos que totalPaid engloba tudo.
-
-  // Saldo devedor = Principal + (Juros+Multa - JurosPagos) - (TotalPago - JurosPagos)
-  // Simplificando: Saldo = Principal + Juros + Multa - TotalPago
-
-  // O PROBLEMA: O usuário diz que "Saldo devedor não deve abaixar para 700".
-  // Se TotalPago = 300 e Juros = 0, Saldo = 1000 + 0 - 300 = 700.
-
-  // SOLUÇÃO: Se o pagamento for "Somente Juros", ele não deve reduzir o Principal, 
-  // mesmo que exceda o juro atual.
-
-  const principalPaidByRegular = totalPaid.sub(interestOnlyPaid); // Pagamentos de quitação
-
-  // Juros devidos = Max(0, JurosTotais - JurosPagos)
-  // Se JurosPagos > JurosTotais, temos um crédito de juros, que não afeta o principal.
-  const unpaidInterestAndPenalty = totalAccruedInterestAndPenalty.sub(interestOnlyPaid);
-
-  // Mas se for negativo (crédito), não subtraímos do principal. Trava no 0 ou mantém negativo separado?
-  // O usuário quer ver "1.000,00".
-  // Se unpaidInterest for -200 (crédito), e Principal 1000.
-  // TotalDue = 1000 + (-200)? Não. TotalDue = 1000.
-
-  // Ajuste: 
-  // TotalDue = Principal - principalPaidByRegular + MAX(0, unpaidInterestAndPenalty)
-
-  // Mas espere, se eu paguei juros adiantado, eu não devo nada "agora", mas devo o Principal.
-
-  const effectiveUnpaidInterest = Decimal.max(0, unpaidInterestAndPenalty);
-
+  // Pagamentos de quitação (abate do principal)
+  const principalPaidByRegular = totalPaid.sub(interestOnlyPaid);
   const remainingPrincipal = principal.sub(principalPaidByRegular);
+
+  // Lógica de juros:
+  // Se há último pagamento de juros, os juros são calculados desde essa data
+  // e NÃO subtraímos pagamentos anteriores (já estão "quitados")
+  // Se não há, subtraímos os pagamentos de juros do total acumulado
+  let effectiveUnpaidInterest: Decimal;
+
+  if (lastInterestPaymentDate) {
+    // Juros calculados desde o último pagamento - não subtrair pagamentos anteriores
+    effectiveUnpaidInterest = interest.add(penaltyAmount);
+  } else {
+    // Sem pagamento de juros anterior - subtrair do total
+    const unpaidInterestAndPenalty = interest.add(penaltyAmount).sub(interestOnlyPaid);
+    effectiveUnpaidInterest = Decimal.max(0, unpaidInterestAndPenalty);
+  }
 
   const totalDue = remainingPrincipal.add(effectiveUnpaidInterest);
 

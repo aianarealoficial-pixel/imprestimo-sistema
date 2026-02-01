@@ -98,12 +98,19 @@ export const LoanService = {
             new Decimal(0)
         );
 
-        const interestOnlyPaid = loan.payments
-            .filter((p) => p.type === "INTEREST_ONLY")
-            .reduce(
-                (acc: Decimal, payment) => acc.add(new Decimal(payment.amount)),
-                new Decimal(0)
-            );
+        const interestOnlyPayments = loan.payments.filter((p) => p.type === "INTEREST_ONLY");
+
+        const interestOnlyPaid = interestOnlyPayments.reduce(
+            (acc: Decimal, payment) => acc.add(new Decimal(payment.amount)),
+            new Decimal(0)
+        );
+
+        // Encontrar a data do último pagamento de juros
+        const lastInterestPayment = interestOnlyPayments.length > 0
+            ? interestOnlyPayments.reduce((latest, payment) =>
+                payment.paymentDate > latest.paymentDate ? payment : latest
+              )
+            : null;
 
         const settlement = calculateSettlement(
             loan.principalAmount,
@@ -114,7 +121,9 @@ export const LoanService = {
                 interestOnlyPaid,
             },
             loan.loanDate,
-            loan.dueDate
+            loan.dueDate,
+            new Date(),
+            lastInterestPayment?.paymentDate || null
         );
 
         return {
