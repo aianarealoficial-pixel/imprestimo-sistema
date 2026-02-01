@@ -13,22 +13,18 @@ export interface SettlementDetails {
 
 /**
  * Calcula os juros baseado no valor principal e taxa
- * Taxa de 30% por ciclo de 30 dias
+ * Juros fixos por ciclo (30% = 30% independente dos dias)
  */
 export function calculateInterest(
   principal: Decimal | number,
-  rate: Decimal | number,
-  days: number
+  rate: Decimal | number
 ): Decimal {
   const principalDecimal = new Decimal(principal);
   const rateDecimal = new Decimal(rate);
 
-  // Juros = Principal * (Taxa / 100) * (dias / 30)
-  // Usando proporção linear para não zerar juros antes de 30 dias
-  // const cycles = days / 30; -- Usar Divisão Decimal
-  return principalDecimal
-    .mul(rateDecimal.div(100))
-    .mul(new Decimal(days).div(30));
+  // Juros fixos por ciclo: Principal * (Taxa / 100)
+  // Ex: R$ 1.000 a 30% = R$ 300 de juros por ciclo
+  return principalDecimal.mul(rateDecimal.div(100));
 }
 
 /**
@@ -45,61 +41,41 @@ export function calculatePenalty(
 
 /**
  * Calcula todos os valores para quitação de um empréstimo
+ * Juros são fixos por ciclo (30% = R$ 300 para R$ 1.000)
+ * Multa é diária após vencimento
  */
 export function calculateSettlement(
   principalAmount: Decimal | number,
   interestRate: Decimal | number,
   dailyPenalty: Decimal | number,
-  payments: { totalPaid: Decimal | number; interestOnlyPaid: Decimal | number },
   loanDate: Date,
   dueDate: Date,
-  today: Date = new Date(),
-  lastInterestPaymentDate?: Date | null
+  today: Date = new Date()
 ): SettlementDetails {
   const principal = new Decimal(principalAmount);
   const rate = new Decimal(interestRate);
   const penalty = new Decimal(dailyPenalty);
 
-  const totalPaid = new Decimal(payments.totalPaid);
-  const interestOnlyPaid = new Decimal(payments.interestOnlyPaid);
-
-  // Dias desde o último pagamento de juros (ou desde o empréstimo se nunca pagou)
-  const interestStartDate = lastInterestPaymentDate || loanDate;
-  const daysElapsed = Math.max(0, differenceInDays(today, interestStartDate));
+  // Dias desde o empréstimo
+  const daysElapsed = Math.max(0, differenceInDays(today, loanDate));
 
   // Dias em atraso (após vencimento)
   const daysOverdue = Math.max(0, differenceInDays(today, dueDate));
 
-  // Cálculos
-  const interest = calculateInterest(principal, rate, daysElapsed);
+  // Juros fixos por ciclo (ex: 30% de R$ 1.000 = R$ 300)
+  const interest = calculateInterest(principal, rate);
+
+  // Multa diária após vencimento
   const penaltyAmount = calculatePenalty(penalty, daysOverdue);
 
-  // Pagamentos de quitação (abate do principal)
-  const principalPaidByRegular = totalPaid.sub(interestOnlyPaid);
-  const remainingPrincipal = principal.sub(principalPaidByRegular);
-
-  // Lógica de juros:
-  // Se há último pagamento de juros, os juros são calculados desde essa data
-  // e NÃO subtraímos pagamentos anteriores (já estão "quitados")
-  // Se não há, subtraímos os pagamentos de juros do total acumulado
-  let effectiveUnpaidInterest: Decimal;
-
-  if (lastInterestPaymentDate) {
-    // Juros calculados desde o último pagamento - não subtrair pagamentos anteriores
-    effectiveUnpaidInterest = interest.add(penaltyAmount);
-  } else {
-    // Sem pagamento de juros anterior - subtrair do total
-    const unpaidInterestAndPenalty = interest.add(penaltyAmount).sub(interestOnlyPaid);
-    effectiveUnpaidInterest = Decimal.max(0, unpaidInterestAndPenalty);
-  }
-
-  const totalDue = remainingPrincipal.add(effectiveUnpaidInterest);
+  // Total para quitação = Principal + Juros + Multa
+  const totalDue = principal.add(interest).add(penaltyAmount);
 
   return {
-    principal: remainingPrincipal, // Mostra o principal restante real
+    principal,
     interest,
     penalty: penaltyAmount,
-    totalPaid,
+    totalPaid: new Decimal(0),
     totalDue: Decimal.max(totalDue, new Decimal(0)),
     daysElapsed,
     daysOverdue,

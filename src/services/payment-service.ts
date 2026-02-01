@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { PaymentInput } from "@/lib/validators";
 import { Decimal } from "decimal.js";
+import { calculateDueDate } from "@/lib/calculations";
 
 export const PaymentService = {
     async registerPayment(userId: string, data: PaymentInput) {
@@ -49,11 +50,24 @@ export const PaymentService = {
                 },
             });
         } else {
-            // Somente juros - mantém principal em aberto
+            // Somente juros - renova o ciclo por mais 30 dias
+            // Buscar dias padrão do usuário
+            const user = await db.user.findUnique({
+                where: { id: userId },
+                select: { defaultDueDays: true },
+            });
+            const dueDays = user?.defaultDueDays ?? 30;
+
+            // Nova data de vencimento = data do pagamento + dias padrão
+            const newDueDate = calculateDueDate(paymentDate, dueDays);
+
             await db.loan.update({
                 where: { id: loanId },
                 data: {
                     totalPaid: newTotalPaid,
+                    loanDate: paymentDate, // Novo ciclo começa na data do pagamento
+                    dueDate: newDueDate,   // Novo vencimento
+                    status: "ACTIVE",      // Garante que volta para ativo
                     updatedBy: userId,
                 },
             });

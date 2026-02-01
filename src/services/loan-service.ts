@@ -92,43 +92,27 @@ export const LoanService = {
 
         if (!loan) return null;
 
-        // Calcular valores atuais
+        // Calcular valores de quitação (juros fixos por ciclo + multa)
+        const settlement = calculateSettlement(
+            loan.remainingPrincipal,
+            loan.interestRate,
+            loan.dailyPenalty,
+            loan.loanDate,
+            loan.dueDate
+        );
+
+        // Calcular total já pago
         const totalPaid = loan.payments.reduce(
             (acc: Decimal, payment) => acc.add(new Decimal(payment.amount)),
             new Decimal(0)
         );
 
-        const interestOnlyPayments = loan.payments.filter((p) => p.type === "INTEREST_ONLY");
-
-        const interestOnlyPaid = interestOnlyPayments.reduce(
-            (acc: Decimal, payment) => acc.add(new Decimal(payment.amount)),
-            new Decimal(0)
-        );
-
-        // Encontrar a data do último pagamento de juros
-        const lastInterestPayment = interestOnlyPayments.length > 0
-            ? interestOnlyPayments.reduce((latest, payment) =>
-                payment.paymentDate > latest.paymentDate ? payment : latest
-              )
-            : null;
-
-        const settlement = calculateSettlement(
-            loan.principalAmount,
-            loan.interestRate,
-            loan.dailyPenalty,
-            {
-                totalPaid,
-                interestOnlyPaid,
-            },
-            loan.loanDate,
-            loan.dueDate,
-            new Date(),
-            lastInterestPayment?.paymentDate || null
-        );
-
         return {
             ...loan,
-            settlement,
+            settlement: {
+                ...settlement,
+                totalPaid,
+            },
         };
     },
 
